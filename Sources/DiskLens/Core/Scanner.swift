@@ -38,7 +38,11 @@ struct Scanner {
 
     /// How deep the live snapshots reach (the chart shows ~6 rings from the root).
     private static let snapshotDepth = 6
-    private static let snapshotInterval: TimeInterval = 0.3
+    /// The counter refreshes at 60 fps (cheap). Tree snapshots — which rebuild the
+    /// chart and roll up thousands of nodes — refresh at 20 fps to avoid starving
+    /// the scan; the detail bars animate between snapshots so they still read as 60 fps.
+    private static let progressInterval: TimeInterval = 1.0 / 60
+    private static let snapshotInterval: TimeInterval = 1.0 / 20
     /// Hard cap on nodes copied per snapshot so cost stays flat as the tree grows
     /// (otherwise a big scan's snapshots would swamp the scan thread and the UI).
     private static let snapshotBudget = 5000
@@ -125,7 +129,7 @@ struct Scanner {
     private func maybeEmit(_ rootNode: FileNode, _ progress: inout ScanProgress,
                            _ lastEmit: inout Date, _ lastSnap: inout Date) {
         let now = Date()
-        if now.timeIntervalSince(lastEmit) > 0.1 {
+        if now.timeIntervalSince(lastEmit) > Self.progressInterval {
             lastEmit = now
             onProgress(progress)
         }

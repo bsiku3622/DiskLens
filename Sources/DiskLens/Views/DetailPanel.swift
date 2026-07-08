@@ -16,10 +16,12 @@ struct DetailPanel: View {
             Divider()
             if let focus = state.focus, !focus.sortedChildren.isEmpty {
                 List {
-                    ForEach(focus.sortedChildren) { child in
+                    // Keyed by URL (not the per-snapshot node id) so a folder's row
+                    // persists across live snapshots and its bar can animate in place.
+                    ForEach(focus.sortedChildren, id: \.url) { child in
                         ChildRow(node: child,
-                                 isHovered: state.hovered?.id == child.id,
-                                 isSelected: state.selected?.id == child.id,
+                                 isHovered: state.hovered?.url == child.url,
+                                 isSelected: state.selected?.url == child.url,
                                  lang: lang,
                                  onTap: { state.drill(into: child) },
                                  onReveal: { state.reveal(child) },
@@ -179,6 +181,8 @@ private struct ProportionBar: View {
                 Capsule().fill(Color.primary.opacity(0.08))
                 Capsule().fill(tint.opacity(0.85))
                     .frame(width: max(2, geo.size.width * CGFloat(min(max(fraction, 0), 1))))
+                    // Tween between the ~20 fps snapshots so the bar reads as 60 fps.
+                    .animation(.linear(duration: 0.05), value: fraction)
             }
         }
         .frame(height: 5)

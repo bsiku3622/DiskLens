@@ -15,7 +15,7 @@ TAG="v$VERSION"
 ZIP="DiskLens-mac.zip"
 NOTES="${1:-DiskLens $VERSION}"
 
-echo "Releasing $TAG…"
+echo "Releasing $TAG ..."
 ./build.sh release
 
 rm -f "$ZIP"
