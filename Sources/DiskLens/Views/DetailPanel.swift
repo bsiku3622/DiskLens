@@ -25,7 +25,7 @@ struct DetailPanel: View {
                                  lang: lang,
                                  onTap: { state.drill(into: child) },
                                  onReveal: { state.reveal(child) },
-                                 onTrash: { pendingTrash = child })
+                                 onTrash: child.isSynthetic ? nil : { pendingTrash = child })
                             .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
                             .listRowSeparator(.hidden)
                     }
@@ -107,7 +107,8 @@ private struct ChildRow: View {
     let lang: Lang
     let onTap: () -> Void
     let onReveal: () -> Void
-    let onTrash: () -> Void
+    /// nil for a synthetic volume node — there's no real path to move to the Trash.
+    let onTrash: (() -> Void)?
 
     @State private var rowHover = false
 
@@ -146,7 +147,9 @@ private struct ChildRow: View {
             if rowHover {
                 HStack(spacing: 4) {
                     IconButton(system: "magnifyingglass", help: L(.revealInFinder, lang), action: onReveal)
-                    IconButton(system: "trash", help: L(.moveToTrash, lang), tint: .red, action: onTrash)
+                    if let onTrash {
+                        IconButton(system: "trash", help: L(.moveToTrash, lang), tint: .red, action: onTrash)
+                    }
                 }
                 .padding(.trailing, 6)
                 .transition(.opacity)
@@ -154,8 +157,10 @@ private struct ChildRow: View {
         }
         .contextMenu {
             Button(L(.revealInFinder, lang), systemImage: "magnifyingglass", action: onReveal)
-            Divider()
-            Button(L(.moveToTrash, lang), systemImage: "trash", role: .destructive, action: onTrash)
+            if let onTrash {
+                Divider()
+                Button(L(.moveToTrash, lang), systemImage: "trash", role: .destructive, action: onTrash)
+            }
         }
     }
 

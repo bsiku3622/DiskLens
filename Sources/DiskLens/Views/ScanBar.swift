@@ -77,6 +77,18 @@ struct ScanBar: View {
                 .foregroundStyle(Color.accentColor)
             Text("(\(root.fileCount) \(L(.files, lang)))")
                 .font(.caption).foregroundStyle(.secondary)
+            if let volumes = state.volumes, volumes.scanRootIsVolumeRoot,
+               volumes.containerUsedBytes > 0 {
+                Text("·").foregroundStyle(.tertiary)
+                HStack(spacing: 3) {
+                    Text(String(format: L(.diskActual, lang),
+                                volumes.containerUsedBytes.humanBytes))
+                        .font(.caption).monospacedDigit()
+                    Image(systemName: "info.circle").font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+                .help(L(.cloneNote, lang))
+            }
         }
     }
 

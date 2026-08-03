@@ -11,9 +11,15 @@ in, and move space hogs to the Trash from the side panel.
 - **Sunburst visualization** — folder hierarchy as concentric rings, each slice
   sized by its share of on-disk usage. Hover for details, click to drill in,
   click the center hole (or the breadcrumb) to go back up.
-- **Accurate sizing** — uses on-disk allocated size, counts hidden files
-  (`.git`, caches, dotfiles), and does not follow symlinks, so totals line up
-  with `du`.
+- **Accurate sizing** — on-disk allocated size, hidden files included (`.git`,
+  caches, dotfiles), symlinks never followed. Scans stop at volume boundaries,
+  so a snapshot remount like `/System/Volumes/Update/mnt1` isn't counted as a
+  second copy of `/`; hardlinked files are counted once; and system volumes
+  (Preboot, VM, Update) are reported at their real size instead of walked. The
+  disk's actual usage is shown next to the scanned total.
+- **Honest permission reporting** — unreadable folders are split into the ones
+  Full Disk Access can unlock and the root-owned ones no permission will, and
+  you can list exactly which were skipped.
 - **Contents panel** — the focused folder's children, largest first, with
   proportion bars and percentages.
 - **Move to Trash** — recoverable cleanup (never a hard delete), with a
@@ -65,7 +71,7 @@ open -a DiskLens.app --args /path/to/folder
 ```
 Sources/DiskLens/
   App/      DiskLensApp, AppDelegate, ContentView   — app entry & shell
-  Core/     Scanner, FileNode, TrashService         — scan engine & model
+  Core/     Scanner, VolumeMap, FileNode, TrashService  — scan engine & model
   Model/    AppState                                — observable app state
   Views/    SunburstView, DetailPanel, ScanBar      — UI
   Design/   Theme, L10n                             — colors, icons, strings

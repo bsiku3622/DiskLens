@@ -10,6 +10,10 @@ final class FileNode: Identifiable, @unchecked Sendable {
     let url: URL
     let name: String
     let isDirectory: Bool
+    /// Stands in for a volume the scan deliberately didn't walk into (see `VolumeMap`).
+    /// Its size comes from the volume, not from summing children, so it can't be
+    /// drilled into and must never be offered for deletion.
+    let isSynthetic: Bool
 
     /// Total bytes on disk: own allocated size for files, sum of children for folders.
     private(set) var size: Int64
@@ -20,13 +24,14 @@ final class FileNode: Identifiable, @unchecked Sendable {
     weak var parent: FileNode?
 
     init(url: URL, name: String, isDirectory: Bool, size: Int64,
-         children: [FileNode] = [], fileCount: Int = 0) {
+         children: [FileNode] = [], fileCount: Int = 0, isSynthetic: Bool = false) {
         self.url = url
         self.name = name
         self.isDirectory = isDirectory
         self.size = size
         self.children = children
         self.fileCount = fileCount
+        self.isSynthetic = isSynthetic
         for child in children { child.parent = self }
     }
 

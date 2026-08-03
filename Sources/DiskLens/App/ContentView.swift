@@ -7,6 +7,7 @@ struct ContentView: View {
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
     @State private var deniedDismissed = false
+    @State private var deniedListShown = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +33,7 @@ struct ContentView: View {
             updater.checkOnLaunch()
         }
         .onChange(of: state.isScanning) { _, scanning in
-            if scanning { deniedDismissed = false }
+            if scanning { deniedDismissed = false; deniedListShown = false }
         }
     }
 
@@ -82,24 +83,73 @@ struct ContentView: View {
     }
 
     private var deniedBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lock.shield")
-                .foregroundStyle(.orange)
-            Text(String(format: L(.deniedBanner, lang), state.progress.deniedCount))
-                .font(.callout).lineLimit(2)
-            Spacer(minLength: 8)
-            Button(L(.grantFullDiskAccess, lang)) { state.openFullDiskAccessSettings() }
-                .buttonStyle(.borderedProminent).controlSize(.small)
-            Button {
-                deniedDismissed = true
-            } label: {
-                Image(systemName: "xmark")
+        let progress = state.progress
+        let fixable = progress.deniedFixable
+        let protectedOnly = fixable == 0
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: protectedOnly ? "lock.shield" : "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(deniedMessage)
+                    .font(.callout).lineLimit(2)
+                Spacer(minLength: 8)
+                Button(deniedListShown ? L(.deniedHideFolders, lang) : L(.deniedShowFolders, lang)) {
+                    deniedListShown.toggle()
+                }
+                .buttonStyle(.borderless).controlSize(.small)
+                // Only offer the toggle when it can actually change the outcome —
+                // root-owned directories stay closed no matter what TCC says.
+                if fixable > 0 {
+                    Button(L(.grantFullDiskAccess, lang)) { state.openFullDiskAccessSettings() }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                }
+                Button {
+                    deniedDismissed = true
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L(.deniedDismiss, lang))
             }
-            .buttonStyle(.borderless)
-            .help(L(.deniedDismiss, lang))
+            if deniedListShown { deniedList }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
         .background(Color.orange.opacity(0.12))
+    }
+
+    private var deniedMessage: String {
+        let progress = state.progress
+        if progress.deniedFixable == 0 {
+            return String(format: L(.deniedBannerProtected, lang), progress.deniedProtected)
+        }
+        if progress.deniedProtected == 0 {
+            return String(format: L(.deniedBanner, lang), progress.deniedFixable)
+        }
+        return String(format: L(.deniedBannerMixed, lang), progress.deniedCount,
+                      progress.deniedFixable, progress.deniedProtected)
+    }
+
+    private var deniedList: some View {
+        let paths = state.progress.deniedPaths
+        let hidden = state.progress.deniedCount - paths.count
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(paths, id: \.self) { path in
+                    Text(path)
+                        .font(.caption).monospaced()
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if hidden > 0 {
+                    Text(String(format: L(.deniedListMore, lang), hidden))
+                        .font(.caption).foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(maxHeight: 130)
     }
 
     /// If launched with a directory path argument (`open -a DiskLens --args /path`),

@@ -19,6 +19,8 @@ final class AppState: ObservableObject {
     @Published var scannedURL: URL?
     @Published var errorMessage: String?
     @Published var toast: String?
+    /// Mount layout for the current scan: sibling volumes and what the disk really holds.
+    @Published var volumes: VolumeMap?
 
     private var scanTask: Task<Void, Never>?
 
@@ -50,10 +52,14 @@ final class AppState: ObservableObject {
         root = FileNode(url: url, name: name, isDirectory: true, size: 0)
         focus = root
 
+        let volumeMap = VolumeMap(scanRoot: url)
+        volumes = volumeMap
+
         // AppState.shared is a permanent singleton, so a strong capture is fine here.
         scanTask = Task {
             let scanner = Scanner(
                 root: url,
+                volumes: volumeMap,
                 onProgress: { p in Task { @MainActor in self.progress = p } },
                 onSnapshot: { tree in Task { @MainActor in self.applySnapshot(tree) } },
                 onComplete: { tree in Task { @MainActor in self.applyComplete(tree) } }
@@ -147,7 +153,8 @@ final class AppState: ObservableObject {
     }
 
     func moveToTrash(_ node: FileNode) {
-        guard let parent = node.parent else { return }
+        // Synthetic volume nodes stand in for mount points, not for anything deletable.
+        guard !node.isSynthetic, let parent = node.parent else { return }
         do {
             try TrashService.moveToTrash(node.url)
             parent.removeChild(node)

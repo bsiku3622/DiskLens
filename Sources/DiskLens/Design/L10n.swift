@@ -30,7 +30,10 @@ enum LKey {
     case percentOfParent, empty
     case scanFailed, permissionHint
     case scanningItem
-    case deniedBanner, grantFullDiskAccess, deniedDismiss
+    case deniedBanner, deniedBannerProtected, deniedBannerMixed
+    case grantFullDiskAccess, deniedDismiss
+    case deniedShowFolders, deniedHideFolders, deniedListMore
+    case systemReserved, diskActual, cloneNote
     case updateAvailable, updateNow, updateLater, updateDownloading, updateInstalling, updateFailed, checkForUpdates
     case quickPickWholeDisk, quickPickHome, quickPickDownloads, quickPickDocuments, quickPickDesktop
 }
@@ -73,10 +76,22 @@ func L(_ key: LKey, _ lang: Lang = .current) -> String {
     case .permissionHint:     return ko ? "일부 폴더는 시스템 권한이 필요할 수 있습니다."
                                         : "Some folders may require system permission."
     case .scanningItem:       return ko ? "%@ 스캔 중…" : "Scanning %@…"
-    case .deniedBanner:       return ko ? "권한 때문에 %d개 폴더를 읽지 못했습니다. 전체 디스크 접근을 허용하면 완전히 스캔됩니다."
-                                        : "Couldn't read %d folders without permission. Grant Full Disk Access to scan everything."
+    case .deniedBanner:       return ko ? "권한 때문에 %d개 폴더를 읽지 못했습니다. 전체 디스크 접근을 허용하면 스캔됩니다."
+                                        : "Couldn't read %d folders without permission. Grant Full Disk Access and they'll be scanned."
+    case .deniedBannerProtected:
+                              return ko ? "%d개 폴더는 시스템이 보호하고 있어 읽을 수 없습니다. 관리자 소유라 전체 디스크 접근으로는 열리지 않습니다."
+                                        : "%d folders are system-protected and can't be read. They're owned by root, so Full Disk Access won't open them."
+    case .deniedBannerMixed:  return ko ? "%d개 폴더를 읽지 못했습니다 — 전체 디스크 접근으로 열리는 곳 %d개, 시스템이 보호하는 곳 %d개."
+                                        : "Couldn't read %d folders — %d that Full Disk Access would unlock, %d that are system-protected."
     case .grantFullDiskAccess: return ko ? "전체 디스크 접근 허용" : "Grant Full Disk Access"
     case .deniedDismiss:      return ko ? "닫기" : "Dismiss"
+    case .deniedShowFolders:  return ko ? "어떤 폴더인지 보기" : "Which folders?"
+    case .deniedHideFolders:  return ko ? "목록 접기" : "Hide list"
+    case .deniedListMore:     return ko ? "외 %d개 더" : "and %d more"
+    case .systemReserved:     return ko ? "시스템 예약" : "System Reserved"
+    case .diskActual:         return ko ? "디스크 실사용 %@" : "%@ actually on disk"
+    case .cloneNote:          return ko ? "스캔 합계는 파일마다 할당된 크기를 더한 값입니다. APFS 복제본이 블록을 공유하면 같은 블록이 여러 번 세어져 실제 사용량보다 커집니다."
+                                        : "The scanned total sums each file's allocated size. Where APFS clones share blocks, those blocks are counted once per clone, so the total runs above what the disk actually holds."
     case .updateAvailable:    return ko ? "새 버전 %@ 이(가) 있습니다." : "Version %@ is available."
     case .updateNow:          return ko ? "업데이트" : "Update"
     case .updateLater:        return ko ? "나중에" : "Later"
