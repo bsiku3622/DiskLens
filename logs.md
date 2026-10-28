@@ -1,5 +1,12 @@
 # DiskLens logs
 
+## 2026-10-28 — "DiskLens 응용 프로그램을 더 이상 열 수 없습니다" 수정
+
+- 변경 파일: `Sources/DiskLens/App/Entry.swift`
+- 요약: 0.3.0부터 `--mcp` 프로세스가 LaunchServices에 "실행 중인 DiskLens"로 등록돼서, 앱을 열면 macOS가 그 프로세스를 앞으로 불러오려다 실패했습니다. `--mcp`에서는 AppKit을 쓰지 않게 했습니다.
+
+⚠️ **`--mcp` 경로에서 `NSApplication.shared`를 부르면 안 됩니다.** 화면 없는 실행에서 Dock 아이콘을 숨기려고 `NSApplication.shared.setActivationPolicy(.prohibited)`를 불렀는데, 이 호출 자체가 프로세스를 앱 인스턴스로 등록합니다(`lsappinfo list`에 `bundleID="com.jaewonbaek.disklens"`로 나오고, 하나는 `type="Foreground"`였음). MCP 서버는 Claude Code 세션이 오래 붙잡고 있고, 백그라운드 작업용 예비 세션(`claude bg-spare`)도 사용자 범위 MCP를 미리 띄웁니다. 그래서 Claude Code를 쓰지 않을 때도 앱이 안 열렸습니다. 같은 이유로 자동 업데이트의 마지막 단계(`open` 재실행)도 실패했을 겁니다. 이제는 LaunchServices로 띄우는 `--export`에서만 Dock 숨김을 씁니다. 확인 방법: `--mcp`로 띄운 뒤 `lsappinfo list | grep -c "pid = <pid> "`가 0이어야 합니다.
+
 ## 2026-10-28 — AI 사이드바: Claude Code·Codex 대화, 모델 선택, 생각·작업 표시 (0.4.0)
 
 - 변경 파일: `Agents/`(새로 추가), `Model/AgentChat.swift`, `Views/AgentSidebar.swift`, `Core/CurrentScan.swift`, `Views/MarksBanner.swift`(`ClaudeBanner`에서 이름 변경), 기존 화면과 `MCPServer`
