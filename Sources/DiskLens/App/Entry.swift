@@ -8,6 +8,11 @@ enum Entry {
     @MainActor
     static func main() {
         guard let command = HeadlessCommand(arguments: Array(CommandLine.arguments.dropFirst())) else {
+            // AppKit treats a bare path argument as a document to open, and a SwiftUI
+            // app that opens one at launch never creates its first window — so
+            // `open -a DiskLens --args /folder` showed nothing. ContentView reads the
+            // folder argument itself.
+            UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
             DiskLensApp.main()
             return
         }
