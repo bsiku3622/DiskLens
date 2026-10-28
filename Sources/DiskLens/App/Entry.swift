@@ -16,9 +16,16 @@ enum Entry {
             DiskLensApp.main()
             return
         }
-        // Launched through `open`, a bundle app gets a Dock icon until it checks in;
-        // a headless run never will, so opt out of the Dock entirely.
-        NSApplication.shared.setActivationPolicy(.prohibited)
+        if case .export = command {
+            // `open -n -W -a DiskLens --args --export …` launches through LaunchServices,
+            // which shows a Dock icon until the app checks in; a headless run never
+            // will, so opt out of the Dock.
+            NSApplication.shared.setActivationPolicy(.prohibited)
+        }
+        // Never touch AppKit in --mcp: NSApplication.shared registers the process with
+        // LaunchServices as a running DiskLens, and agents keep MCP servers alive for
+        // hours. Opening the app then tries to bring that headless process forward and
+        // fails with "DiskLens can't be opened".
         Task {
             let status = await command.run()
             exit(status)
