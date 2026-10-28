@@ -23,6 +23,8 @@ final class AppState: ObservableObject {
     @Published var volumes: VolumeMap?
 
     private var scanTask: Task<Void, Never>?
+    /// Where to land once the running scan finishes (see `show(path:)`).
+    private var pendingFocusPath: String?
 
     // MARK: - Scanning
 
@@ -93,6 +95,10 @@ final class AppState: ObservableObject {
         progress.currentName = ""
         hovered = nil
         selected = nil
+        if let path = pendingFocusPath {
+            pendingFocusPath = nil
+            _ = focus(path: path)
+        }
         objectWillChange.send()
     }
 
@@ -136,6 +142,32 @@ final class AppState: ObservableObject {
         focus = node
         selected = nil
         hovered = nil
+    }
+
+    /// Brings `path` into view: a folder becomes the focus, a file is selected inside
+    /// its folder. Outside the current scan, scans the item's folder first.
+    func show(path: String) {
+        if focus(path: path) { return }
+        pendingFocusPath = path
+        scan(URL(fileURLWithPath: path).deletingLastPathComponent())
+    }
+
+    private func focus(path: String) -> Bool {
+        guard var node = root else { return false }
+        while node.url.path != path {
+            // The synthetic volume group shares its parent's path; never descend through it.
+            guard let next = node.children.first(where: { child in
+                !child.isSynthetic && (child.url.path == path || path.hasPrefix(child.url.path + "/"))
+            }) else { return false }
+            node = next
+        }
+        if node.isDirectory, !node.sortedChildren.isEmpty {
+            setFocus(node)
+        } else if let parent = node.parent {
+            setFocus(parent)
+            selected = node
+        }
+        return true
     }
 
     // MARK: - Actions

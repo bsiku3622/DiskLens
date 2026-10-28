@@ -3,11 +3,13 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var updater: Updater
+    @EnvironmentObject var annotations: AnnotationCenter
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
     @State private var deniedDismissed = false
     @State private var deniedListShown = false
+    @State private var claudeDismissed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,6 +26,10 @@ struct ContentView: View {
                 deniedBanner
                 Divider()
             }
+            if !annotations.items.isEmpty && !claudeDismissed {
+                ClaudeBanner(dismissed: $claudeDismissed)
+                Divider()
+            }
             content
         }
         .frame(minWidth: 820, minHeight: 560)
@@ -35,6 +41,8 @@ struct ContentView: View {
         .onChange(of: state.isScanning) { _, scanning in
             if scanning { deniedDismissed = false; deniedListShown = false }
         }
+        // New marks bring a dismissed banner back.
+        .onChange(of: annotations.updatedAt) { _, _ in claudeDismissed = false }
     }
 
     private var updateBusy: Bool {

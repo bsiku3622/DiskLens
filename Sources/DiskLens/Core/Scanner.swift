@@ -62,6 +62,8 @@ struct Scanner {
     let onSnapshot: @Sendable (FileNode) -> Void
     /// The final, complete tree once the scan finishes.
     let onComplete: @Sendable (FileNode) -> Void
+    /// Headless runs have no chart to feed, so they skip building snapshots.
+    var liveSnapshots = true
 
     /// How deep the live snapshots reach (the chart shows ~6 rings from the root).
     private static let snapshotDepth = 6
@@ -241,7 +243,7 @@ struct Scanner {
             state.lastEmit = now
             onProgress(state.progress)
         }
-        if now.timeIntervalSince(state.lastSnap) > Self.snapshotInterval {
+        if liveSnapshots, now.timeIntervalSince(state.lastSnap) > Self.snapshotInterval {
             state.lastSnap = now
             onSnapshot(Self.snapshot(rootNode, depth: Self.snapshotDepth, budget: Self.snapshotBudget))
         }

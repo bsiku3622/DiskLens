@@ -3,6 +3,7 @@ import SwiftUI
 /// Right-hand panel: breadcrumb + the focused folder's children, largest first.
 struct DetailPanel: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var annotations: AnnotationCenter
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
@@ -22,6 +23,10 @@ struct DetailPanel: View {
                         ChildRow(node: child,
                                  isHovered: state.hovered?.url == child.url,
                                  isSelected: state.selected?.url == child.url,
+                                 // The synthetic volume group shares its parent's path,
+                                 // so it would otherwise inherit every mark below it.
+                                 annotation: child.isSynthetic ? nil : annotations.annotation(for: child.url.path),
+                                 markedInside: child.isSynthetic ? 0 : annotations.markedInside(child.url.path),
                                  lang: lang,
                                  onTap: { state.drill(into: child) },
                                  onReveal: { state.reveal(child) },
@@ -104,6 +109,10 @@ private struct ChildRow: View {
     let node: FileNode
     let isHovered: Bool
     let isSelected: Bool
+    /// Claude's verdict on this item, if any.
+    let annotation: Annotation?
+    /// Marked items somewhere inside this folder.
+    let markedInside: Int
     let lang: Lang
     let onTap: () -> Void
     let onReveal: () -> Void
@@ -122,6 +131,14 @@ private struct ChildRow: View {
                 Text(node.name)
                     .font(.callout)
                     .lineLimit(1).truncationMode(.middle)
+                if let annotation {
+                    VerdictChip(verdict: annotation.verdict, lang: lang)
+                        .help(annotation.note)
+                } else if markedInside > 0 {
+                    Image(systemName: "sparkles")
+                        .font(.caption2).foregroundStyle(.purple)
+                        .help(String(format: L(.claudeMarkedInside, lang), markedInside))
+                }
                 Spacer(minLength: 6)
                 Text(node.size.humanBytes)
                     .font(.callout).monospacedDigit()
@@ -133,6 +150,12 @@ private struct ChildRow: View {
                     .font(.caption2).monospacedDigit()
                     .foregroundStyle(.tertiary)
                     .frame(width: 40, alignment: .trailing)
+            }
+            if let note = annotation?.note, !note.isEmpty {
+                Text(note)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.vertical, 3).padding(.horizontal, 6)

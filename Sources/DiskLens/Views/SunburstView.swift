@@ -14,6 +14,7 @@ private struct Slice: Identifiable {
 /// Radial (sunburst) map of the focused folder's contents.
 struct SunburstView: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var annotations: AnnotationCenter
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
@@ -96,6 +97,16 @@ struct SunburstView: View {
             let path = donut(c, inner, outer, slice.a0 + g, slice.a1 - g)
             let isHot = slice.node.id == hoveredID
             ctx.fill(path, with: .color(Theme.color(hue: slice.hue, depth: slice.depth, hovered: isHot)))
+            // Claude's marks: the item in its verdict color, and a faint trail on the
+            // folders that lead to it.
+            if !slice.node.isSynthetic {
+                let nodePath = slice.node.url.path
+                if let mark = annotations.annotation(for: nodePath) {
+                    ctx.stroke(path, with: .color(mark.verdict.color), lineWidth: 2.5)
+                } else if annotations.markedInside(nodePath) > 0 {
+                    ctx.stroke(path, with: .color(.purple.opacity(0.55)), lineWidth: 1)
+                }
+            }
             if isHot {
                 ctx.stroke(path, with: .color(.white.opacity(0.9)), lineWidth: 1.5)
             }

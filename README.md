@@ -66,15 +66,84 @@ You can also point it at a folder from the command line:
 open -a DiskLens.app --args /path/to/folder
 ```
 
+## Agent integration
+
+DiskLens can work with coding agents such as Claude Code in three ways. All of
+them use the same scan engine as the app.
+
+### JSON export
+
+```bash
+DiskLens --export scan.json [--min-size 20M] [--max-depth N] /path/to/folder
+DiskLens --export - ~/Library        # write to stdout
+```
+
+This writes a size-pruned tree. Items smaller than `--min-size` (default 20 MB)
+are folded into each folder's `otherSize`/`otherCount`, so even a whole-disk
+scan stays at a few thousand nodes.
+
+When run from a terminal, the scan uses the terminal's permissions. To use the
+app's own Full Disk Access grant, launch it through LaunchServices with an
+absolute output path:
+
+```bash
+open -n -W -a DiskLens --args --export /tmp/scan.json /
+```
+
+### MCP server
+
+```bash
+claude mcp add --scope user disklens -- /Applications/DiskLens.app/Contents/MacOS/DiskLens --mcp
+```
+
+`DiskLens --mcp` speaks the Model Context Protocol over stdio and provides
+these tools:
+
+| Tool | What it does |
+| --- | --- |
+| `scan` | Scan a folder (or `/`) and keep the result in memory |
+| `list` | List a folder's children from the cached scan, largest first |
+| `largest_files` | Find the largest files under a folder |
+| `move_to_trash` | Move items to the Trash; only allowed inside home or `/Applications`, and never a top-level home folder |
+| `annotate` | Mark items as `safe`, `review` or `keep` with a note, for the app to show |
+| `open_app` | Open the app, optionally scanning a folder |
+
+### Annotations in the app
+
+Marks are stored in `~/Library/Application Support/DiskLens/annotations.json`.
+`annotate` writes this file, and so can anything else that follows the same
+format. The app checks it every two seconds and shows the marks in three
+places:
+
+- a banner that lists every mark and jumps to the item when clicked;
+- a verdict badge with a note on rows in the contents list;
+- a colored outline on the marked slice in the sunburst, with a faint trail on
+  the folders that contain it.
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-10-28T09:00:00Z",
+  "source": "Claude",
+  "items": [
+    { "path": "/Users/me/Library/Caches/Google", "verdict": "safe",
+      "note": "Chrome cache; regenerates.", "reclaimBytes": 5000000000 }
+  ]
+}
+```
+
 ## Project layout
 
 ```
 Sources/DiskLens/
-  App/      DiskLensApp, AppDelegate, ContentView   — app entry & shell
-  Core/     Scanner, VolumeMap, FileNode, TrashService  — scan engine & model
-  Model/    AppState                                — observable app state
-  Views/    SunburstView, DetailPanel, ScanBar      — UI
-  Design/   Theme, L10n                             — colors, icons, strings
+  App/      Entry, DiskLensApp, AppDelegate, ContentView  — entry point & app shell
+  Core/     Scanner, VolumeMap, FileNode, TrashService,
+            UsageTree, Annotations                      — scan engine, export model, marks
+  Headless/ HeadlessCommand, MCPServer                  — --export and --mcp modes
+  Model/    AppState, AnnotationCenter                  — observable app state
+  Views/    SunburstView, DetailPanel, ScanBar,
+            ClaudeBanner                                — UI
+  Design/   Theme, L10n                                 — colors, icons, strings
 ```
 
 ## License

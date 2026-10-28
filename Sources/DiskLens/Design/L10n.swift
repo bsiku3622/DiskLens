@@ -36,6 +36,8 @@ enum LKey {
     case systemReserved, diskActual, cloneNote
     case updateAvailable, updateNow, updateLater, updateDownloading, updateInstalling, updateFailed, checkForUpdates
     case quickPickWholeDisk, quickPickHome, quickPickDownloads, quickPickDocuments, quickPickDesktop
+    case verdictSafe, verdictReview, verdictKeep
+    case claudeBanner, claudeReclaimable, claudeShowList, claudeClear, claudeMarkedInside
 }
 
 /// Localized string. Views pass an @AppStorage-tracked `lang` so they re-render on change.
@@ -104,5 +106,13 @@ func L(_ key: LKey, _ lang: Lang = .current) -> String {
     case .quickPickDownloads: return ko ? "다운로드" : "Downloads"
     case .quickPickDocuments: return ko ? "문서" : "Documents"
     case .quickPickDesktop:   return ko ? "데스크탑" : "Desktop"
+    case .verdictSafe:        return ko ? "정리 가능" : "Safe to remove"
+    case .verdictReview:      return ko ? "확인 필요" : "Review"
+    case .verdictKeep:        return ko ? "유지" : "Keep"
+    case .claudeBanner:       return ko ? "Claude가 %d개 항목을 표시했습니다." : "Claude marked %d items."
+    case .claudeReclaimable:  return ko ? "정리 가능 %@" : "%@ reclaimable"
+    case .claudeShowList:     return ko ? "목록 보기" : "Show list"
+    case .claudeClear:        return ko ? "표시 지우기" : "Clear marks"
+    case .claudeMarkedInside: return ko ? "안쪽에 Claude가 표시한 항목 %d개" : "%d items marked by Claude inside"
     }
 }
