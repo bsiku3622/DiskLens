@@ -21,4 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
+
+    /// Don't leave the sidebar's agent process running after the app quits.
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { AgentChat.shared.shutdown() }
+    }
 }

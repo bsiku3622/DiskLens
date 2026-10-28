@@ -4,6 +4,7 @@ import SwiftUI
 struct DetailPanel: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var annotations: AnnotationCenter
+    @EnvironmentObject var chat: AgentChat
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
@@ -30,6 +31,7 @@ struct DetailPanel: View {
                                  lang: lang,
                                  onTap: { state.drill(into: child) },
                                  onReveal: { state.reveal(child) },
+                                 onAsk: chat.isRunning ? nil : { chat.ask(about: child) },
                                  onTrash: child.isSynthetic ? nil : { pendingTrash = child })
                             .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
                             .listRowSeparator(.hidden)
@@ -109,13 +111,15 @@ private struct ChildRow: View {
     let node: FileNode
     let isHovered: Bool
     let isSelected: Bool
-    /// Claude's verdict on this item, if any.
+    /// The agent's verdict on this item, if any.
     let annotation: Annotation?
     /// Marked items somewhere inside this folder.
     let markedInside: Int
     let lang: Lang
     let onTap: () -> Void
     let onReveal: () -> Void
+    /// nil while the agent is already answering.
+    let onAsk: (() -> Void)?
     /// nil for a synthetic volume node — there's no real path to move to the Trash.
     let onTrash: (() -> Void)?
 
@@ -137,7 +141,7 @@ private struct ChildRow: View {
                 } else if markedInside > 0 {
                     Image(systemName: "sparkles")
                         .font(.caption2).foregroundStyle(.purple)
-                        .help(String(format: L(.claudeMarkedInside, lang), markedInside))
+                        .help(String(format: L(.marksInside, lang), markedInside))
                 }
                 Spacer(minLength: 6)
                 Text(node.size.humanBytes)
@@ -169,6 +173,9 @@ private struct ChildRow: View {
         .overlay(alignment: .trailing) {
             if rowHover {
                 HStack(spacing: 4) {
+                    if let onAsk {
+                        IconButton(system: "sparkles", help: L(.agentAsk, lang), tint: .purple, action: onAsk)
+                    }
                     IconButton(system: "magnifyingglass", help: L(.revealInFinder, lang), action: onReveal)
                     if let onTrash {
                         IconButton(system: "trash", help: L(.moveToTrash, lang), tint: .red, action: onTrash)
@@ -179,6 +186,9 @@ private struct ChildRow: View {
             }
         }
         .contextMenu {
+            if let onAsk {
+                Button(L(.agentAsk, lang), systemImage: "sparkles", action: onAsk)
+            }
             Button(L(.revealInFinder, lang), systemImage: "magnifyingglass", action: onReveal)
             if let onTrash {
                 Divider()

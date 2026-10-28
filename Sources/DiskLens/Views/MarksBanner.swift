@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Banner for the items Claude marked, with a list that jumps to each one in the chart.
-struct ClaudeBanner: View {
+/// Banner for the items an agent marked, with a list that jumps to each one in the chart.
+struct MarksBanner: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var annotations: AnnotationCenter
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
@@ -16,11 +16,11 @@ struct ClaudeBanner: View {
                 Image(systemName: "sparkles").foregroundStyle(.purple)
                 Text(headline).font(.callout).lineLimit(1)
                 Spacer(minLength: 8)
-                Button(listShown ? L(.deniedHideFolders, lang) : L(.claudeShowList, lang)) {
+                Button(listShown ? L(.deniedHideFolders, lang) : L(.marksShowList, lang)) {
                     listShown.toggle()
                 }
                 .buttonStyle(.borderless).controlSize(.small)
-                Button(L(.claudeClear, lang)) { annotations.clear() }
+                Button(L(.marksClear, lang)) { annotations.clear() }
                     .buttonStyle(.borderless).controlSize(.small)
                 Button {
                     dismissed = true
@@ -37,9 +37,9 @@ struct ClaudeBanner: View {
     }
 
     private var headline: String {
-        var text = String(format: L(.claudeBanner, lang), annotations.items.count)
+        var text = String(format: L(.marksBanner, lang), annotations.source, annotations.items.count)
         if annotations.reclaimable > 0 {
-            text += " · " + String(format: L(.claudeReclaimable, lang), annotations.reclaimable.humanBytes)
+            text += " · " + String(format: L(.marksReclaimable, lang), annotations.reclaimable.humanBytes)
         }
         return text
     }

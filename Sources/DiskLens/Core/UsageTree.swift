@@ -138,12 +138,18 @@ enum HeadlessScan {
                               liveSnapshots: false)
         try await scanner.run()
         guard let tree = box.tree else { throw ScanError.cancelled }
+        return report(tree, volumes: volumes, progress: box.progress, startedAt: started,
+                      minSize: minSize, maxDepth: maxDepth)
+    }
 
-        let p = box.progress
-        return ScanReport(
+    /// Prunes a finished tree into a report. Shared by headless runs and the app,
+    /// which hands its own scans to the MCP server (see `CurrentScan`).
+    static func report(_ tree: FileNode, volumes: VolumeMap, progress p: ScanProgress,
+                       startedAt started: Date, minSize: Int64, maxDepth: Int) -> ScanReport {
+        ScanReport(
             app: "DiskLens",
             version: appVersion,
-            root: root.path,
+            root: tree.url.path,
             scannedAt: started,
             durationSeconds: Date().timeIntervalSince(started),
             scannedBytes: tree.size,

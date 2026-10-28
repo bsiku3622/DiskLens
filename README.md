@@ -68,8 +68,45 @@ open -a DiskLens.app --args /path/to/folder
 
 ## Agent integration
 
-DiskLens can work with coding agents such as Claude Code in three ways. All of
+DiskLens works with coding agents (Claude Code and Codex) in four ways. All of
 them use the same scan engine as the app.
+
+### AI sidebar
+
+The sparkle button at the right end of the toolbar opens a chat with an agent
+installed on the Mac. On the first press you pick **Claude Code** or **Codex**,
+along with its model and reasoning level. The chat then opens with a request to
+analyze the current scan already in the input box. Nothing runs until you press
+Send. **Ask AI** on a row of the contents list fills in a question about that item
+in the same way.
+
+While the agent works, the sidebar shows:
+
+- a status line with what it's doing and how long it has taken;
+- its reasoning, live while it streams, then folded;
+- each tool call as a step with a spinner, check or cross, its duration and its
+  output;
+- the time and tokens for each answer.
+
+The model can be changed from the header between messages.
+
+The sidebar runs the agent's own CLI (`claude -p` with stream-json, or
+`codex exec --json`). It does **not** load your agent settings, because those may
+skip permission checks. Instead it:
+
+- connects only this app as an MCP server;
+- gives the agent read-only shell access (an allow list for Claude Code, a
+  read-only sandbox for Codex);
+- passes your `storage-cleanup` skill in as instructions.
+
+The agent can move items to the Trash when you ask it to, but it cannot delete
+anything permanently. Items it trashes are removed from the chart. Its marks
+appear as described under [Annotations in the app](#annotations-in-the-app).
+
+The scan you're looking at is saved to
+`~/Library/Application Support/DiskLens/current-scan.json` (items of 1 MB or
+more). The MCP server's `current_scan` tool reads that file, so the agent
+doesn't scan again.
 
 ### JSON export
 
@@ -101,6 +138,7 @@ these tools:
 
 | Tool | What it does |
 | --- | --- |
+| `current_scan` | Return the app's latest scan, which is what the user is looking at |
 | `scan` | Scan a folder (or `/`) and keep the result in memory |
 | `list` | List a folder's children from the cached scan, largest first |
 | `largest_files` | Find the largest files under a folder |
@@ -138,11 +176,13 @@ places:
 Sources/DiskLens/
   App/      Entry, DiskLensApp, AppDelegate, ContentView  — entry point & app shell
   Core/     Scanner, VolumeMap, FileNode, TrashService,
-            UsageTree, Annotations                      — scan engine, export model, marks
+            UsageTree, CurrentScan, Annotations         — scan engine, export model, marks
   Headless/ HeadlessCommand, MCPServer                  — --export and --mcp modes
-  Model/    AppState, AnnotationCenter                  — observable app state
+  Agents/   AgentDriver, AgentModels,
+            ClaudeCodeDriver, CodexDriver               — running agent CLIs for the sidebar
+  Model/    AppState, AnnotationCenter, AgentChat       — observable app state
   Views/    SunburstView, DetailPanel, ScanBar,
-            ClaudeBanner                                — UI
+            MarksBanner, AgentSidebar                   — UI
   Design/   Theme, L10n                                 — colors, icons, strings
 ```
 

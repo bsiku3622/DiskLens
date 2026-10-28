@@ -3,6 +3,7 @@ import SwiftUI
 /// Top toolbar: folder picker, scan status/progress, total, language toggle.
 struct ScanBar: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var chat: AgentChat
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
@@ -45,6 +46,24 @@ struct ScanBar: View {
             .pickerStyle(.segmented)
             .frame(width: 150)
             .labelsHidden()
+
+            // One entry point for the AI sidebar: picks an agent the first time,
+            // then shows and hides the conversation.
+            Button {
+                chat.toolbarButtonPressed()
+            } label: {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(chat.isVisible ? Color.purple : .primary)
+                    .frame(width: 30, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 6)
+                        .fill(chat.isVisible ? Color.purple.opacity(0.15) : .clear))
+            }
+            .buttonStyle(.borderless)
+            .help(L(.agentButtonHelp, lang))
+            .popover(isPresented: $chat.pickerShown, arrowEdge: .bottom) {
+                AgentPicker().environmentObject(chat)
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
     }

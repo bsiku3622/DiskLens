@@ -97,7 +97,7 @@ struct SunburstView: View {
             let path = donut(c, inner, outer, slice.a0 + g, slice.a1 - g)
             let isHot = slice.node.id == hoveredID
             ctx.fill(path, with: .color(Theme.color(hue: slice.hue, depth: slice.depth, hovered: isHot)))
-            // Claude's marks: the item in its verdict color, and a faint trail on the
+            // Agent marks: the item in its verdict color, and a faint trail on the
             // folders that lead to it.
             if !slice.node.isSynthetic {
                 let nodePath = slice.node.url.path

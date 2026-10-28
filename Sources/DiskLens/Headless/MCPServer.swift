@@ -13,6 +13,11 @@ final class MCPServer {
 
     /// Finished scans keyed by root path. A later scan of the same root replaces it.
     private var scans: [String: ScanReport] = [:]
+    /// Modification date and root of the app's `current-scan.json` when it was last loaded.
+    private var currentScanStamp: Date?
+    private var currentScanRoot: String?
+    /// The connected agent, credited as the source of its marks.
+    private var clientName = "AI"
 
     func run() async -> Int32 {
         while let line = readLine(strippingNewline: true) {
@@ -37,6 +42,8 @@ final class MCPServer {
 
         switch method {
         case "initialize":
+            let client = ((params["clientInfo"] as? [String: Any])?["name"] as? String ?? "").lowercased()
+            clientName = client.contains("claude") ? "Claude" : client.contains("codex") ? "Codex" : "AI"
             let requested = params["protocolVersion"] as? String ?? ""
             let version = Self.supportedVersions.contains(requested) ? requested : Self.supportedVersions[0]
             return result(id: id, [
@@ -86,6 +93,14 @@ final class MCPServer {
 
     private func call(_ name: String, _ args: [String: Any]) async throws -> Any {
         switch name {
+        case "current_scan":
+            guard let report = refreshCurrentScan() else {
+                throw ToolError("The DiskLens app has no finished scan yet. Use scan instead.")
+            }
+            var out = summary(report)
+            out["source"] = "the DiskLens app's own scan — what the user is looking at"
+            return out
+
         case "scan":
             let root = Self.path(args["path"]) ?? FileManager.default.homeDirectoryForCurrentUser.path
             let minSize = Self.megabytes(args["min_size_mb"]) ?? Self.defaultMinSize
@@ -126,7 +141,7 @@ final class MCPServer {
                 filled.reclaimBytes = size
                 return filled
             }
-            let file = try AnnotationStore.write(items, replace: replace, source: "Claude")
+            let file = try AnnotationStore.write(items, replace: replace, source: clientName)
             return ["file": AnnotationStore.fileURL.path, "count": file.items.count,
                     "note": "The DiskLens app picks up changes within a few seconds."]
 
@@ -138,6 +153,21 @@ final class MCPServer {
         default:
             throw ToolError("Unknown tool: \(name)")
         }
+    }
+
+    /// Picks up the app's latest scan when it changed, unless a newer scan of the same
+    /// root is already cached. Returns the freshest scan of the app's root.
+    @discardableResult
+    private func refreshCurrentScan() -> ScanReport? {
+        guard let stamp = CurrentScan.modified else { return nil }
+        if stamp != currentScanStamp, let report = CurrentScan.load() {
+            currentScanStamp = stamp
+            currentScanRoot = report.root
+            if (scans[report.root]?.scannedAt ?? .distantPast) < report.scannedAt {
+                scans[report.root] = report
+            }
+        }
+        return currentScanRoot.flatMap { scans[$0] }
     }
 
     private func scan(_ root: String, minSize: Int64) async throws -> ScanReport {
@@ -153,6 +183,7 @@ final class MCPServer {
     /// The node for `path` from the narrowest cached scan that holds it, scanning the
     /// path itself when none does.
     private func node(at path: String) async throws -> (UsageNode, ScanReport) {
+        refreshCurrentScan()
         let covering = scans.values
             .filter { path == $0.root || path.hasPrefix($0.root == "/" ? "/" : $0.root + "/") }
             .sorted { $0.root.count > $1.root.count }
@@ -285,13 +316,20 @@ final class MCPServer {
     private static let instructions = """
     DiskLens measures on-disk usage the way the DiskLens app does: allocated sizes, \
     hidden files included, hardlinks counted once, firmlinks and other volumes never \
-    double-counted. Call scan once (your home folder, or "/" for the whole disk), then \
-    browse with list and largest_files — they read the cached scan. Use annotate to \
+    double-counted. Start with current_scan: when the app has scanned, it is exactly \
+    what the user is looking at, at no cost. Otherwise call scan once (your home \
+    folder, or "/" for the whole disk). Then browse with list and largest_files — they \
+    read the cached scan, including the app's. Use annotate to \
     show your verdicts to the user inside the app. move_to_trash is recoverable but \
     frees no space until the Trash is emptied.
     """
 
     private static let tools: [[String: Any]] = [
+        [
+            "name": "current_scan",
+            "description": "The DiskLens app's latest scan — the folder the user is looking at in the app — with totals and the largest top-level items. No scanning needed; list and largest_files read it too. Fails if the app hasn't scanned yet.",
+            "inputSchema": ["type": "object", "properties": [:]],
+        ],
         [
             "name": "scan",
             "description": "Scan a folder with DiskLens and cache the result for list and largest_files. Use \"/\" for the whole disk. A home-folder scan can take a minute or two. Returns totals and the largest top-level items.",
@@ -339,7 +377,7 @@ final class MCPServer {
         ],
         [
             "name": "annotate",
-            "description": "Mark items for the user to see in the DiskLens app: a badge in the contents list, an outline in the sunburst, and a list in the app's Claude banner. verdict: safe (can be removed), review (the user should decide), keep (should stay). The note is shown as the reason.",
+            "description": "Mark items for the user to see in the DiskLens app: a badge in the contents list, an outline in the sunburst, and a list in the app's banner. verdict: safe (can be removed), review (the user should decide), keep (should stay). The note is shown as the reason.",
             "inputSchema": [
                 "type": "object",
                 "properties": [

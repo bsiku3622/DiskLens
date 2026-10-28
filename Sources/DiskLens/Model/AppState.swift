@@ -57,14 +57,25 @@ final class AppState: ObservableObject {
         let volumeMap = VolumeMap(scanRoot: url)
         volumes = volumeMap
 
+        final class LastProgress: @unchecked Sendable { var value = ScanProgress() }
+        let last = LastProgress()
+        let startedAt = Date()
+
         // AppState.shared is a permanent singleton, so a strong capture is fine here.
         scanTask = Task {
             let scanner = Scanner(
                 root: url,
                 volumes: volumeMap,
-                onProgress: { p in Task { @MainActor in self.progress = p } },
+                onProgress: { p in last.value = p; Task { @MainActor in self.progress = p } },
                 onSnapshot: { tree in Task { @MainActor in self.applySnapshot(tree) } },
-                onComplete: { tree in Task { @MainActor in self.applyComplete(tree) } }
+                onComplete: { tree in
+                    // Still on the scan thread, before the tree is handed to the UI and
+                    // can change: save it for Claude in the sidebar.
+                    CurrentScan.save(HeadlessScan.report(tree, volumes: volumeMap, progress: last.value,
+                                                         startedAt: startedAt, minSize: CurrentScan.minSize,
+                                                         maxDepth: 64))
+                    Task { @MainActor in self.applyComplete(tree) }
+                }
             )
             do {
                 try await scanner.run()
@@ -152,15 +163,31 @@ final class AppState: ObservableObject {
         scan(URL(fileURLWithPath: path).deletingLastPathComponent())
     }
 
-    private func focus(path: String) -> Bool {
-        guard var node = root else { return false }
+    /// Drops an item that was trashed outside the app (by Claude in the sidebar) from
+    /// the tree, the same way `moveToTrash` does after trashing it itself.
+    func removeNode(path: String) {
+        guard let node = node(at: path), let parent = node.parent, !node.isSynthetic else { return }
+        parent.removeChild(node)
+        if selected?.id == node.id { selected = nil }
+        if hovered?.id == node.id { hovered = nil }
+        if let focus, focus.url.path == path || focus.url.path.hasPrefix(path + "/") { self.focus = parent }
+        objectWillChange.send()
+    }
+
+    private func node(at path: String) -> FileNode? {
+        guard var node = root else { return nil }
         while node.url.path != path {
             // The synthetic volume group shares its parent's path; never descend through it.
             guard let next = node.children.first(where: { child in
                 !child.isSynthetic && (child.url.path == path || path.hasPrefix(child.url.path + "/"))
-            }) else { return false }
+            }) else { return nil }
             node = next
         }
+        return node
+    }
+
+    private func focus(path: String) -> Bool {
+        guard let node = node(at: path) else { return false }
         if node.isDirectory, !node.sortedChildren.isEmpty {
             setFocus(node)
         } else if let parent = node.parent {

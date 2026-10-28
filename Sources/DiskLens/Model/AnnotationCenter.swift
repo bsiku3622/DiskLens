@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The app's view of `annotations.json`: Claude's verdicts on items, shown as
+/// The app's view of `annotations.json`: an agent's verdicts on items, shown as
 /// badges and outlines. Polls the file so marks written while the app is open
 /// appear within a couple of seconds.
 @MainActor
@@ -9,6 +9,8 @@ final class AnnotationCenter: ObservableObject {
 
     @Published private(set) var items: [Annotation] = []
     @Published private(set) var updatedAt: Date?
+    /// Who wrote the marks ("Claude", "Codex"), for the banner.
+    @Published private(set) var source = "AI"
     private var byPath: [String: Annotation] = [:]
     /// Every folder that contains a marked item, so the chart can trace the way in.
     private var ancestors: [String: Int] = [:]
@@ -33,7 +35,7 @@ final class AnnotationCenter: ObservableObject {
     }
 
     func clear() {
-        try? AnnotationStore.write([], replace: true, source: "DiskLens")
+        _ = try? AnnotationStore.write([], replace: true, source: "DiskLens")
         reload()
     }
 
@@ -49,6 +51,7 @@ final class AnnotationCenter: ObservableObject {
         let file = AnnotationStore.load()
         items = file?.items ?? []
         updatedAt = file?.updatedAt
+        source = file?.source ?? "AI"
         byPath = Dictionary(items.map { ($0.path, $0) }, uniquingKeysWith: { _, last in last })
         var counts: [String: Int] = [:]
         for item in items {
