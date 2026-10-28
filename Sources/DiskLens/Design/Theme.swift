@@ -23,7 +23,7 @@ enum Theme {
     /// Accent color for a file kind, used in list rows.
     static func tint(for node: FileNode) -> Color {
         if node.isDirectory { return .accentColor }
-        switch node.url.pathExtension.lowercased() {
+        switch (node.name as NSString).pathExtension.lowercased() {
         case "jpg", "jpeg", "png", "gif", "heic", "webp", "tiff", "bmp": return .pink
         case "mp4", "mov", "avi", "mkv", "m4v", "webm": return .purple
         case "mp3", "wav", "flac", "aac", "m4a", "aiff": return .orange
@@ -36,7 +36,7 @@ enum Theme {
 
     static func icon(for node: FileNode) -> String {
         if node.isDirectory { return "folder.fill" }
-        switch node.url.pathExtension.lowercased() {
+        switch (node.name as NSString).pathExtension.lowercased() {
         case "jpg", "jpeg", "png", "gif", "heic", "webp", "tiff", "bmp": return "photo.fill"
         case "mp4", "mov", "avi", "mkv", "m4v", "webm": return "film.fill"
         case "mp3", "wav", "flac", "aac", "m4a", "aiff": return "music.note"

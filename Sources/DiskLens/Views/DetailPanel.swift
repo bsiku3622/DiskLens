@@ -18,12 +18,12 @@ struct DetailPanel: View {
             Divider()
             if let focus = state.focus, !focus.sortedChildren.isEmpty {
                 List {
-                    // Keyed by URL (not the per-snapshot node id) so a folder's row
+                    // Keyed by name (not the per-snapshot node id) so a folder's row
                     // persists across live snapshots and its bar can animate in place.
-                    ForEach(focus.sortedChildren, id: \.url) { child in
+                    ForEach(focus.sortedChildren, id: \.name) { child in
                         ChildRow(node: child,
-                                 isHovered: state.hovered?.url == child.url,
-                                 isSelected: state.selected?.url == child.url,
+                                 isHovered: state.hovered === child,
+                                 isSelected: state.selected === child,
                                  // The synthetic volume group shares its parent's path,
                                  // so it would otherwise inherit every mark below it.
                                  annotation: child.isSynthetic ? nil : annotations.annotation(for: child.url.path),

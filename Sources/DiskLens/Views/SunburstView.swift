@@ -3,7 +3,7 @@ import SwiftUI
 /// One drawable ring segment. Angles are absolute (radians); radius is applied
 /// at draw time from the current view size, so slices survive resizing.
 private struct Slice: Identifiable {
-    let id: UUID
+    let id: ObjectIdentifier
     let node: FileNode
     let depth: Int
     let a0: CGFloat
@@ -99,7 +99,8 @@ struct SunburstView: View {
             ctx.fill(path, with: .color(Theme.color(hue: slice.hue, depth: slice.depth, hovered: isHot)))
             // Agent marks: the item in its verdict color, and a faint trail on the
             // folders that lead to it.
-            if !slice.node.isSynthetic {
+            // Paths are derived on demand, so skip them entirely when nothing is marked.
+            if !slice.node.isSynthetic, !annotations.items.isEmpty {
                 let nodePath = slice.node.url.path
                 if let mark = annotations.annotation(for: nodePath) {
                     ctx.stroke(path, with: .color(mark.verdict.color), lineWidth: 2.5)
