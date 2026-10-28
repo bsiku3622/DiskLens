@@ -24,7 +24,11 @@ in, and move space hogs to the Trash from the side panel.
   proportion bars and percentages.
 - **Move to Trash** — recoverable cleanup (never a hard delete), with a
   confirmation step. Also "Reveal in Finder".
-- **Fast, cancellable scans** off the main thread, with live progress.
+- **Fast, cancellable scans** off the main thread, with live progress. Directories
+  are listed in parallel with `getattrlistbulk(2)`, which returns a whole listing
+  with sizes in one call. On a 2.7M-file disk this takes about 15 s, compared with
+  96 s for the previous single-threaded FileManager walk. Counts match `du`, including
+  `._` AppleDouble files, which FileManager leaves out of directory listings.
 - **Korean / English** UI, light & dark mode.
 
 ## Build & run
@@ -79,6 +83,10 @@ along with its model and reasoning level. The chat then opens with a request to
 analyze the current scan already in the input box. Nothing runs until you press
 Send. **Ask AI** on a row of the contents list fills in a question about that item
 in the same way.
+
+**Free up space with AI** on the start screen does everything in one step. You
+pick an agent, DiskLens scans the whole disk, and the analysis is sent as soon
+as the scan finishes. The sidebar shows the scan's progress in the meantime.
 
 While the agent works, the sidebar shows:
 
@@ -150,8 +158,9 @@ these tools:
 
 Marks are stored in `~/Library/Application Support/DiskLens/annotations.json`.
 `annotate` writes this file, and so can anything else that follows the same
-format. The app checks it every two seconds and shows the marks in three
-places:
+format. The app checks it every two seconds. Marks written more than two minutes
+before the app started are treated as stale and not shown. The rest appear in
+three places:
 
 - a banner that lists every mark and jumps to the item when clicked;
 - a verdict badge with a note on rows in the contents list;
