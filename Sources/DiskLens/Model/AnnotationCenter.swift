@@ -16,6 +16,9 @@ final class AnnotationCenter: ObservableObject {
     private var ancestors: [String: Int] = [:]
     private var fileStamp: Date?
     private var timer: Timer?
+    /// Marks from an earlier session are stale: the disk has moved on since. Ones
+    /// written just before launch still count — an agent annotates, then opens the app.
+    private let oldestShown = Date().addingTimeInterval(-120)
 
     private init() {
         reload()
@@ -48,7 +51,7 @@ final class AnnotationCenter: ObservableObject {
     private func reload() {
         fileStamp = (try? AnnotationStore.fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate
-        let file = AnnotationStore.load()
+        let file = AnnotationStore.load().flatMap { $0.updatedAt >= oldestShown ? $0 : nil }
         items = file?.items ?? []
         updatedAt = file?.updatedAt
         source = file?.source ?? "AI"

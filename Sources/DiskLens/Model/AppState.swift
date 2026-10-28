@@ -111,6 +111,7 @@ final class AppState: ObservableObject {
             _ = focus(path: path)
         }
         objectWillChange.send()
+        AgentChat.shared.scanFinished(completed: true)
     }
 
     func cancelScan() {
@@ -118,6 +119,7 @@ final class AppState: ObservableObject {
         scanTask = nil
         isScanning = false
         progress.currentName = ""
+        AgentChat.shared.scanFinished(completed: false)
     }
 
     func rescan() {
@@ -128,6 +130,7 @@ final class AppState: ObservableObject {
     private func failScan(_ error: Error) {
         isScanning = false
         errorMessage = L(.scanFailed)
+        AgentChat.shared.scanFinished(completed: false)
     }
 
     // MARK: - Navigation
@@ -170,17 +173,24 @@ final class AppState: ObservableObject {
         parent.removeChild(node)
         if selected?.id == node.id { selected = nil }
         if hovered?.id == node.id { hovered = nil }
-        if let focus, focus.url.path == path || focus.url.path.hasPrefix(path + "/") { self.focus = parent }
+        // The trashed item may be the focused folder or one of its ancestors.
+        if let focus, focus.ancestry.contains(where: { $0 === node }) { self.focus = parent }
         objectWillChange.send()
     }
 
+    /// Walks down from the root by name. Comparing names, not URLs: scanned nodes
+    /// derive their URL from the parent chain, so building one per child is costly.
     private func node(at path: String) -> FileNode? {
-        guard var node = root else { return nil }
-        while node.url.path != path {
+        guard let root else { return nil }
+        let rootPath = root.url.path
+        if path == rootPath { return root }
+        let prefix = rootPath == "/" ? "/" : rootPath + "/"
+        guard path.hasPrefix(prefix) else { return nil }
+        var node = root
+        for component in path.dropFirst(prefix.count).split(separator: "/") {
             // The synthetic volume group shares its parent's path; never descend through it.
-            guard let next = node.children.first(where: { child in
-                !child.isSynthetic && (child.url.path == path || path.hasPrefix(child.url.path + "/"))
-            }) else { return nil }
+            guard let next = node.children.first(where: { !$0.isSynthetic && $0.name == component })
+            else { return nil }
             node = next
         }
         return node

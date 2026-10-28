@@ -12,7 +12,10 @@ struct AgentSidebar: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if let status = chat.status, let started = chat.messages.last?.started {
+            if chat.waitingForScan {
+                ScanStatusLine(lang: lang)
+                Divider()
+            } else if let status = chat.status, let started = chat.messages.last?.started {
                 StatusLine(text: status, since: started, lang: lang)
                 Divider()
             }
@@ -172,6 +175,31 @@ private struct StatusLine: View {
     }
 }
 
+/// The scan that "Free up space with AI" waits on. Observes the scan on its own, so
+/// its 60 fps progress doesn't redraw the whole transcript.
+private struct ScanStatusLine: View {
+    @EnvironmentObject var state: AppState
+    let lang: Lang
+    @State private var since = Date()
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.mini)
+                Text(String(format: L(.agentScanStatus, lang),
+                            state.progress.fileCount.formatted(), state.progress.byteCount.humanBytes))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                Text(durationText(context.date.timeIntervalSince(since), lang))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.purple.opacity(0.06))
+        }
+    }
+}
+
 private struct MessageView: View {
     let message: AgentChat.Message
     let lang: Lang
@@ -194,22 +222,62 @@ private struct MessageView: View {
             Label(message.text, systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
+        case .info:
+            Label(message.text, systemImage: "info.circle")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         case .assistant:
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(message.segments) { segment in
-                    switch segment.kind {
-                    case .thinking:
-                        ThinkingBlock(segment: segment, lang: lang)
-                    case .step:
-                        StepRow(segment: segment, lang: lang)
-                    case .text:
-                        ChatMarkdown(text: segment.text)
+                ForEach(pieces) { piece in
+                    switch piece {
+                    case .single(let segment):
+                        switch segment.kind {
+                        case .thinking: ThinkingBlock(segment: segment, lang: lang)
+                        case .step: StepRow(segment: segment, lang: lang)
+                        case .text: ChatMarkdown(text: segment.text)
+                        }
+                    case .steps(let steps):
+                        StepGroup(steps: steps, lang: lang)
                     }
                 }
                 if !isLive, let ended = message.ended { footer(ended) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// A run of tool calls between bits of thinking or text.
+    private enum Piece: Identifiable {
+        case single(AgentChat.Segment)
+        case steps([AgentChat.Segment])
+
+        var id: UUID {
+            switch self {
+            case .single(let s): return s.id
+            case .steps(let steps): return steps[0].id
+            }
+        }
+    }
+
+    /// Long runs of steps fold into one row so a big analysis (dozens of calls) stays
+    /// readable; short runs stay as they are.
+    private var pieces: [Piece] {
+        var out: [Piece] = []
+        var run: [AgentChat.Segment] = []
+        func flush() {
+            if run.count > 3 { out.append(.steps(run)) } else { out += run.map(Piece.single) }
+            run = []
+        }
+        for segment in message.segments {
+            if segment.kind == .step {
+                run.append(segment)
+            } else {
+                flush()
+                out.append(.single(segment))
+            }
+        }
+        flush()
+        return out
     }
 
     private func footer(_ ended: Date) -> some View {
@@ -301,6 +369,55 @@ private struct ThinkingBlock: View {
     }
 }
 
+/// "12 steps · 1 failed · 34s ▸", with the step in progress shown beneath while it runs.
+private struct StepGroup: View {
+    let steps: [AgentChat.Segment]
+    let lang: Lang
+
+    @State private var expanded = false
+
+    var body: some View {
+        let running = steps.last { $0.state == .running }
+        let failed = steps.filter { $0.state == .failed }.count
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 7) {
+                    Group {
+                        if running != nil {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "list.bullet").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 14)
+                    Text(String(format: L(.agentSteps, lang), steps.count)
+                         + (failed > 0 ? " · " + String(format: L(.agentStepsFailed, lang), failed) : ""))
+                        .font(.caption)
+                    Spacer(minLength: 6)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(durationText((steps.last?.ended ?? context.date).timeIntervalSince(steps[0].started), lang))
+                            .font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+                    }
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.purple.opacity(0.06)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                ForEach(steps) { StepRow(segment: $0, lang: lang).padding(.leading, 12) }
+            } else if let running {
+                StepRow(segment: running, lang: lang).padding(.leading, 12)
+            }
+        }
+    }
+}
+
 /// One tool call: spinner, check or cross, what it did, how long, and its output.
 private struct StepRow: View {
     let segment: AgentChat.Segment
@@ -366,7 +483,7 @@ struct AgentPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L(.agentPickTitle, lang)).font(.headline)
-            Text(L(.agentPickHint, lang))
+            Text(L(chat.pickPurpose == .freeUpSpace ? .agentFreeUpHint : .agentPickHint, lang))
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 6) {

@@ -39,11 +39,13 @@ enum LKey {
     case verdictSafe, verdictReview, verdictKeep
     case marksBanner, marksReclaimable, marksShowList, marksClear, marksInside
     case agentButtonHelp, agentAsk, agentPickTitle, agentPickHint, agentConfirm
+    case agentFreeUp, agentFreeUpHint, agentFreeUpScanning, agentFreeUpCancelled, agentScanStatus
     case agentNotInstalled, agentNotInstalledHelp
     case agentNewChat, agentStop, agentSend, agentPlaceholder, agentClose, agentEmptyHint
     case agentFailed, agentStopped
     case agentStatusStarting, agentStatusThinking, agentStatusWriting, agentThoughtFor, agentReasoning
     case agentModel, agentEffort, agentModelHelp, agentTokens, agentCopy, agentCopied
+    case agentSteps, agentStepsFailed
     case agentPromptAnalyze, agentPromptAnalyzeNoScan, agentPromptItem
     case actCurrentScan, actScan, actList, actLargest, actAnnotate, actTrash
     case actRead, actRun, actFind, actSearch
@@ -129,6 +131,13 @@ func L(_ key: LKey, _ lang: Lang = .current) -> String {
     case .agentPickHint:      return ko ? "이 Mac에 설치된 에이전트가 지금 보고 있는 스캔을 직접 살펴봅니다. 확인을 누르면 질문이 채워진 채팅창이 열리고, 보내기를 누르기 전에는 아무것도 실행하지 않습니다."
                                         : "An agent installed on this Mac looks at the scan you're viewing. Confirm opens the chat with a question filled in; nothing runs until you send it."
     case .agentConfirm:       return ko ? "확인" : "Confirm"
+    case .agentFreeUp:        return ko ? "AI로 용량 확보하기" : "Free up space with AI"
+    case .agentFreeUpHint:    return ko ? "디스크 전체를 스캔한 뒤, 고른 에이전트가 바로 분석을 시작합니다. 정리할 항목은 분석 결과를 보고 직접 고르시면 됩니다."
+                                        : "Scans the whole disk, then the chosen agent analyzes it right away. You pick what to clean up from its findings."
+    case .agentFreeUpScanning: return ko ? "디스크 전체를 스캔하고 있습니다. 끝나면 바로 분석을 시작합니다."
+                                         : "Scanning the whole disk. The analysis starts as soon as it's done."
+    case .agentFreeUpCancelled: return ko ? "스캔이 끝나지 않아 분석을 시작하지 않았습니다." : "The scan didn't finish, so the analysis wasn't started."
+    case .agentScanStatus:    return ko ? "디스크 스캔 중 · %@개 항목 · %@" : "Scanning the disk · %@ items · %@"
     case .agentNotInstalled:  return ko ? "설치되지 않음" : "Not installed"
     case .agentNotInstalledHelp: return ko ? "%@를 설치하고 터미널에서 로그인하면 쓸 수 있습니다." : "Install %@ and sign in from the Terminal to use it."
     case .agentNewChat:       return ko ? "새 대화" : "New chat"
@@ -151,6 +160,8 @@ func L(_ key: LKey, _ lang: Lang = .current) -> String {
     case .agentTokens:        return ko ? "입력 %@ · 출력 %@ 토큰" : "%@ in · %@ out tokens"
     case .agentCopy:          return ko ? "복사" : "Copy"
     case .agentCopied:        return ko ? "복사됨" : "Copied"
+    case .agentSteps:         return ko ? "작업 %d개" : "%d steps"
+    case .agentStepsFailed:   return ko ? "실패 %d" : "%d failed"
     case .agentPromptAnalyze: return ko ? "지금 스캔한 %@를 storage-cleanup 지침의 1단계대로 상세 분석해줘. 용량을 차지하는 주범을 찾아 판정을 표시하고 목록으로 요약해줘. 지우는 건 내가 고른 뒤에만 해."
                                         : "Analyze %@, which I just scanned, following step 1 of the storage-cleanup playbook. Find what's taking the space, mark verdicts, and sum them up as a list. Delete nothing until I choose."
     case .agentPromptAnalyzeNoScan: return ko ? "이 Mac의 디스크를 storage-cleanup 지침의 1단계대로 상세 분석해줘. 용량을 차지하는 주범을 찾아 판정을 표시하고 목록으로 요약해줘. 지우는 건 내가 고른 뒤에만 해."

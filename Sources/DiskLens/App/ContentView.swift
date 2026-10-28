@@ -247,6 +247,7 @@ struct ContentView: View {
 /// Shown before any scan: intro + quick picks for common folders.
 struct EmptyStateView: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var chat: AgentChat
     @AppStorage("appLanguage") private var langRaw = Lang.initial.rawValue
     private var lang: Lang { Lang(rawValue: langRaw) ?? .en }
 
@@ -262,13 +263,29 @@ struct EmptyStateView: View {
                     .font(.callout).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center).frame(maxWidth: 420)
             }
+            // Scan the whole disk and have an agent analyze it, in one press.
+            Button {
+                chat.freeUpSpacePressed()
+            } label: {
+                Label(L(.agentFreeUp, lang), systemImage: "sparkles")
+                    .padding(.horizontal, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.purple)
+            .controlSize(.large)
+            .popover(isPresented: Binding(get: { chat.pickerShown && chat.pickPurpose == .freeUpSpace },
+                                          set: { if !$0 { chat.pickerShown = false } }),
+                     arrowEdge: .bottom) {
+                AgentPicker().environmentObject(chat)
+            }
+
             Button {
                 state.chooseFolderAndScan()
             } label: {
                 Label(L(.chooseFolder, lang), systemImage: "folder")
                     .padding(.horizontal, 6)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.large)
 
             quickPicks

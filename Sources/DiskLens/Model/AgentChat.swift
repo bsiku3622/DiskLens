@@ -26,7 +26,8 @@ final class AgentChat: ObservableObject {
     }
 
     struct Message: Identifiable {
-        enum Role { case user, assistant, notice }
+        /// `notice` reports a problem; `info` narrates what the app is doing.
+        enum Role { case user, assistant, notice, info }
         let id = UUID()
         let role: Role
         /// The user's prompt or a notice; answers keep their content in `segments`.
@@ -43,9 +44,20 @@ final class AgentChat: ObservableObject {
         }
     }
 
+    /// What confirming the agent picker leads to.
+    enum PickPurpose {
+        /// Open the chat with a prompt ready to send.
+        case chat
+        /// Scan the whole disk, then send the analysis right away.
+        case freeUpSpace
+    }
+
     @Published var isVisible = false
-    /// The agent picker popover on the toolbar button.
+    /// The agent picker popover, shown on the button that asked for it.
     @Published var pickerShown = false
+    @Published private(set) var pickPurpose = PickPurpose.chat
+    /// "Free up space with AI" is scanning; the analysis goes out when it's done.
+    @Published private(set) var waitingForScan = false
     /// The agent for the next conversation; fixed once one starts.
     @Published var kind: AgentKind {
         didSet {
@@ -108,7 +120,39 @@ final class AgentChat: ObservableObject {
             isVisible.toggle()
         } else {
             prefillAfterPick = analysisPrompt()
+            pickPurpose = .chat
             pickerShown = true
+        }
+    }
+
+    /// "Free up space with AI" on the start screen: scan the whole disk and analyze
+    /// it in one go. Pressing it is the request, so the analysis is sent unprompted.
+    func freeUpSpacePressed() {
+        if started {
+            beginFreeUp()
+        } else {
+            pickPurpose = .freeUpSpace
+            pickerShown = true
+        }
+    }
+
+    private func beginFreeUp() {
+        isVisible = true
+        waitingForScan = true
+        messages.append(Message(role: .info, text: L(.agentFreeUpScanning)))
+        bump()
+        AppState.shared.scan(URL(fileURLWithPath: "/"))
+    }
+
+    /// Called by the app when a scan ends, to send a waiting analysis.
+    func scanFinished(completed: Bool) {
+        guard waitingForScan else { return }
+        waitingForScan = false
+        if completed {
+            send(analysisPrompt())
+        } else {
+            messages.append(Message(role: .info, text: L(.agentFreeUpCancelled)))
+            bump()
         }
     }
 
@@ -123,17 +167,24 @@ final class AgentChat: ObservableObject {
             isVisible = true
         } else {
             prefillAfterPick = prompt
+            pickPurpose = .chat
             pickerShown = true
         }
     }
 
-    /// The picker's confirm button: start with the chosen agent and open the chat.
+    /// The picker's confirm button: start with the chosen agent, then open the chat
+    /// with a prompt ready, or set off the scan-and-analyze run.
     func confirmPick() {
         pickerShown = false
         guard start() else { return }
-        draft = prefillAfterPick
-        prefillAfterPick = ""
-        isVisible = true
+        switch pickPurpose {
+        case .chat:
+            draft = prefillAfterPick
+            prefillAfterPick = ""
+            isVisible = true
+        case .freeUpSpace:
+            beginFreeUp()
+        }
     }
 
     private func analysisPrompt() -> String {
@@ -192,6 +243,7 @@ final class AgentChat: ObservableObject {
         started = false
         isRunning = false
         isVisible = false
+        waitingForScan = false
         messages = []
         draft = ""
         bump()

@@ -61,7 +61,9 @@ struct ScanBar: View {
             }
             .buttonStyle(.borderless)
             .help(L(.agentButtonHelp, lang))
-            .popover(isPresented: $chat.pickerShown, arrowEdge: .bottom) {
+            .popover(isPresented: Binding(get: { chat.pickerShown && chat.pickPurpose == .chat },
+                                          set: { if !$0 { chat.pickerShown = false } }),
+                     arrowEdge: .bottom) {
                 AgentPicker().environmentObject(chat)
             }
         }
