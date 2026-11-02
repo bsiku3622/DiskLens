@@ -14,9 +14,15 @@ in, and move space hogs to the Trash from the side panel.
 - **Accurate sizing** — on-disk allocated size, hidden files included (`.git`,
   caches, dotfiles), symlinks never followed. Scans stop at volume boundaries,
   so a snapshot remount like `/System/Volumes/Update/mnt1` isn't counted as a
-  second copy of `/`; hardlinked files are counted once; and system volumes
-  (Preboot, VM, Update) are reported at their real size instead of walked. The
-  disk's actual usage is shown next to the scanned total.
+  second copy of `/`; hard links and APFS clones are counted once, unlike `du`,
+  which charges every clone in full; and system volumes (Preboot, VM, Update) are
+  reported at their real size instead of walked. The disk's actual usage is shown
+  next to the scanned total.
+- **Clone accounting** — bytes shared by clones are charged to one copy, preferring
+  one outside temp folders, caches and the Trash, and the choice is the same on every
+  scan. The other copies read 0, so trashing the charged copy alone frees little while
+  the others remain. A clone edited after copying has its own clone ID and is still
+  counted in full, even though it shares most of its blocks.
 - **Honest permission reporting** — unreadable folders are split into the ones
   Full Disk Access can unlock and the root-owned ones no permission will, and
   you can list exactly which were skipped.
@@ -26,8 +32,10 @@ in, and move space hogs to the Trash from the side panel.
   confirmation step. Also "Reveal in Finder".
 - **Fast, cancellable scans** off the main thread, with live progress. Directories
   are listed in parallel with `getattrlistbulk(2)`, which returns a whole listing
-  with sizes in one call. On a 2.7M-file disk this takes about 15 s, compared with
-  96 s for the previous single-threaded FileManager walk. Counts match `du`, including
+  with sizes in one call. On a 3.5M-file disk a scan takes about a minute when the
+  file system's metadata is cached, compared with 5–8 minutes for the previous
+  single-threaded FileManager walk. The first scan after that cache has gone cold still
+  takes several minutes, because the metadata has to come from disk. File counts include
   `._` AppleDouble files, which FileManager leaves out of directory listings.
 - **Korean / English** UI, light & dark mode.
 
