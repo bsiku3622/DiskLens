@@ -70,7 +70,11 @@ enum AnnotationStore {
     }
 
     /// Absolute, tilde-expanded, no trailing slash — the same shape as `FileNode.url.path`.
+    /// `standardizedFileURL` strips `/private` from `/private/var` and its siblings, but a
+    /// scan of `/` only reaches them through `/private`, so that prefix goes back on.
     static func normalize(_ path: String) -> String {
-        URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL.path
+        let standard = URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL.path
+        let aliased = ["/var", "/tmp", "/etc"].contains { standard == $0 || standard.hasPrefix($0 + "/") }
+        return aliased ? "/private" + standard : standard
     }
 }

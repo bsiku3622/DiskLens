@@ -1,5 +1,18 @@
 # DiskLens logs
 
+## 2026-11-02 — `/private/var` 경로를 못 찾던 MCP 조회 수정 (0.5.1)
+
+- 변경 파일: `Core/Annotations.swift`
+- 요약: `/` 스캔 결과에서 `list`로 `/private/var/...`를 조회하면 17GB짜리 폴더도 "min size보다 작다"는 오류가 났습니다. `normalize`가 경로를 트리와 같은 모양으로 맞추도록 고쳤습니다.
+
+`standardizedFileURL`은 `/private/var`에서 `/private`를 떼어 `/var`로 만듭니다. 그런데 `/`를 스캔한 트리는 `/private/var`로만 내려가므로 찾지 못하고, 찾지 못한 경로는 모두 min size 오류로 안내됩니다. 메시지가 틀려서 원인을 알아보기 어려웠습니다. 트리 쪽을 `/var`로 맞추지 않고 입력 쪽을 `/private`로 맞췄습니다. 실제 경로가 `/private` 쪽이고, 그쪽이 고칠 곳이 `normalize` 한 곳뿐이기 때문입니다. `/var`, `/tmp`, `/etc`만 되돌리고, `/variable` 같은 이름은 건드리지 않습니다.
+
+같은 함수를 쓰는 곳도 따라 바뀝니다. `scan /var`의 root는 이제 `/private/var`입니다. `annotate`도 `/private/...`로 저장되어, 코드상 `/` 스캔 차트의 노드 경로와 일치합니다(화면으로 확인하지는 않았습니다). 이미 저장된 `/var/...` 표시는 다시 쓸 때까지 그대로입니다.
+
+시험 타깃이 없어서 빌드한 앱을 `--mcp`로 띄워 `/`를 실제로 스캔한 뒤 경로 표기별로 15개를 확인했습니다: `~/Bufs/Claude Files/2026-11-02/disklens-path-fix/mcp-test.py`. 이때 `/` 스캔은 680초로 평소보다 오래 걸렸는데, 같은 시간에 Fusion 업데이트와 다른 세션들이 돌고 있었고 원인을 따로 재지는 않았습니다.
+
+찾지 못한 경로를 전부 min size 탓으로 돌리는 오류 문구는 그대로입니다. 없는 경로 `/variable-does-not-exist`에도 같은 문구가 나옵니다.
+
 ## 2026-11-02 — clone을 한 번만 세도록 수정, FAT 용량 0 수정 (0.5.0)
 
 - 변경 파일: `Core/Scanner.swift`, `Design/L10n.swift`, `Core/VolumeMap.swift`, `Headless/MCPServer.swift`, `README.md`
