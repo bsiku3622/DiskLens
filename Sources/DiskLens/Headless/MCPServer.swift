@@ -315,8 +315,11 @@ final class MCPServer {
 
     private static let instructions = """
     DiskLens measures on-disk usage the way the DiskLens app does: allocated sizes, \
-    hidden files included, hardlinks counted once, firmlinks and other volumes never \
-    double-counted. Start with current_scan: when the app has scanned, it is exactly \
+    hidden files included, hard links and APFS clones counted once, firmlinks and \
+    other volumes never double-counted. Bytes shared by clones are charged to one copy \
+    (never one in a temp folder or cache if another exists), so the others read 0, and \
+    trashing that one copy alone frees little while the others remain. Plain du counts \
+    every clone in full, so its numbers can exceed the disk. Start with current_scan: when the app has scanned, it is exactly \
     what the user is looking at, at no cost. Otherwise call scan once (your home \
     folder, or "/" for the whole disk). Then browse with list and largest_files — they \
     read the cached scan, including the app's. Use annotate to \

@@ -29,6 +29,20 @@ private struct InodeKey: Hashable {
     let ino: UInt64
 }
 
+/// One data stream on disk, however many names reach it: the APFS clone ID where the
+/// volume has one, otherwise the inode. Hard links of a file share its clone ID too.
+private struct StreamKey: Hashable {
+    let dev: dev_t
+    let id: UInt64
+}
+
+/// The file currently carrying a shared stream's bytes.
+private struct StreamOwner {
+    let node: FileNode
+    let path: String
+    let bytes: Int64
+}
+
 /// A directory waiting to be listed: its node and its real path.
 private struct PendingDir {
     let node: FileNode
@@ -44,9 +58,9 @@ private final class WalkState: @unchecked Sendable {
     let tree = NSLock()
     var progress = ScanProgress()
     var visitedDirs = Set<InodeKey>()
-    /// Inodes of files with more than one link, so a hardlinked file's bytes are
-    /// counted once no matter how many paths reach it.
-    var visitedLinkedFiles = Set<InodeKey>()
+    /// Streams with more than one name (hard links, APFS clones), so their bytes are
+    /// counted once no matter how many paths reach them.
+    var streamOwners: [StreamKey: StreamOwner] = [:]
 
     let queue = NSCondition()
     var pending: [PendingDir] = []
@@ -92,7 +106,8 @@ private final class WalkState: @unchecked Sendable {
 /// allocated size in one go, instead of a `stat` per file. Files' bytes roll up into
 /// every ancestor as each directory finishes, so sizes are right at any instant; a
 /// monitor thread ships progress and throttled shallow snapshots for the live chart.
-/// Measured on a 1.4M-file home folder: 55 s with the old FileManager walk, ~6 s here.
+/// Measured on 3.5M files with the metadata cached: 5–8 min with the old FileManager
+/// walk, about a minute or less here. A cold cache still takes minutes: that's disk I/O.
 struct Scanner {
     let root: URL
     /// Mount table as of scan start: decides what happens at a volume boundary.
@@ -230,22 +245,25 @@ struct Scanner {
             | attrgroup_t(ATTR_CMN_ERROR)
         request.dirattr = attrgroup_t(ATTR_DIR_MOUNTSTATUS)
         request.fileattr = attrgroup_t(ATTR_FILE_LINKCOUNT) | attrgroup_t(ATTR_FILE_ALLOCSIZE)
+        // Under FSOPT_ATTR_CMN_EXTENDED this group holds extended common attributes.
+        // Volumes without clones (exFAT, HFS+, FAT, SMB) just leave them out.
+        request.forkattr = attrgroup_t(ATTR_CMNEXT_CLONEID) | attrgroup_t(ATTR_CMNEXT_CLONE_REFCNT)
 
         var files: [FileNode] = []
         var bytes: Int64 = 0
-        var linked: [(key: InodeKey, name: String, bytes: Int64)] = []
+        var shared: [(key: StreamKey, node: FileNode, bytes: Int64)] = []
         var subdirs: [(key: InodeKey, name: String)] = []
 
         while true {
-            let count = getattrlistbulk(fd, &request, buffer, Self.bufferSize, 0)
+            let count = getattrlistbulk(fd, &request, buffer, Self.bufferSize, UInt64(FSOPT_ATTR_CMN_EXTENDED))
             if count <= 0 { break }
             var entry = buffer
             for _ in 0..<count {
                 // Each entry: its length, the set of attributes actually returned, then
                 // those attributes — the error first, the rest in bit order, groups in
-                // order (common, directory, file). Directory attributes come only for
-                // directories and file attributes only for files, so the set decides
-                // what to read; never assume a fixed layout.
+                // order (common, directory, file, extended). Directory attributes come
+                // only for directories and file attributes only for files, so the set
+                // decides what to read; never assume a fixed layout.
                 let length = entry.load(as: UInt32.self)
                 let returned = (entry + 4).loadUnaligned(as: attribute_set_t.self)
                 defer { entry += Int(length) }
@@ -268,7 +286,19 @@ struct Scanner {
                 var links: UInt32 = 1
                 if has(returned.fileattr, ATTR_FILE_LINKCOUNT) { links = p.loadUnaligned(as: UInt32.self); p += 4 }
                 var allocated: Int64 = 0
-                if has(returned.fileattr, ATTR_FILE_ALLOCSIZE) { allocated = p.loadUnaligned(as: Int64.self) }
+                if has(returned.fileattr, ATTR_FILE_ALLOCSIZE) {
+                    allocated = p.loadUnaligned(as: Int64.self); p += 8
+                } else if type != UInt32(VDIR.rawValue) {
+                    // FAT volumes don't report it in bulk; ask for this file alone.
+                    var st = stat()
+                    if lstat(Self.join(dir.path, name), &st) == 0 { allocated = Int64(st.st_blocks) * 512 }
+                }
+                var cloneID: UInt64 = 0
+                if has(returned.forkattr, ATTR_CMNEXT_CLONEID) { cloneID = p.loadUnaligned(as: UInt64.self); p += 8 }
+                // A count of 0 or 1 means an unshared stream, so the vast majority of
+                // files never reach the owners table. Unknown counts are checked anyway.
+                var cloneRefs: UInt32 = 2
+                if has(returned.forkattr, ATTR_CMNEXT_CLONE_REFCNT) { cloneRefs = p.loadUnaligned(as: UInt32.self) }
 
                 if type == UInt32(VDIR.rawValue) {
                     var key = InodeKey(dev: dev, ino: ino)
@@ -284,9 +314,16 @@ struct Scanner {
                     }
                     if let rootDev = state.rootDev, key.dev != rootDev { continue }
                     subdirs.append((key, name))
+                } else if cloneID != 0 && (links > 1 || cloneRefs > 1) {
+                    // Hard links and APFS clones are one stream of bytes under several
+                    // names. `settle` decides below which of them carries the bytes.
+                    let node = FileNode(name: name, isDirectory: false, size: 0, fileCount: 1, parent: dir.node)
+                    files.append(node)
+                    shared.append((StreamKey(dev: dev, id: cloneID), node, allocated))
                 } else if links > 1 {
-                    // Hardlinks are one file wearing several names; charge the bytes once.
-                    linked.append((InodeKey(dev: dev, ino: ino), name, allocated))
+                    let node = FileNode(name: name, isDirectory: false, size: 0, fileCount: 1, parent: dir.node)
+                    files.append(node)
+                    shared.append((StreamKey(dev: dev, id: ino), node, allocated))
                 } else {
                     // Symlinks land here too: measured, never followed.
                     files.append(FileNode(name: name, isDirectory: false, size: allocated, fileCount: 1,
@@ -299,12 +336,6 @@ struct Scanner {
         var next: [PendingDir] = []
         var later: [PendingDir] = []
         state.tree.lock()
-        for item in linked {
-            let charged = state.visitedLinkedFiles.insert(item.key).inserted ? item.bytes : 0
-            files.append(FileNode(name: item.name, isDirectory: false, size: charged, fileCount: 1,
-                                  parent: dir.node))
-            bytes += charged
-        }
         var children = files
         for sub in subdirs where state.visitedDirs.insert(sub.key).inserted {
             // Same inode seen before: a firmlink pointing at a directory we counted.
@@ -326,8 +357,55 @@ struct Scanner {
         state.progress.fileCount += files.count
         state.progress.byteCount += bytes
         state.progress.currentName = topLevelName(dir.path)
+        for item in shared {
+            settle(item.key, node: item.node, path: Self.join(dir.path, item.node.name), bytes: item.bytes, state: state)
+        }
         state.tree.unlock()
         return (next, later)
+    }
+
+    /// Charges a shared stream's bytes to exactly one of its names. Workers reach the
+    /// names in no particular order, so the choice follows a fixed rule instead of
+    /// arrival: the charge moves whenever a better-placed name turns up, and every scan
+    /// ends with the same owner. Callers hold the tree lock.
+    private func settle(_ key: StreamKey, node: FileNode, path: String, bytes: Int64, state: WalkState) {
+        if let owner = state.streamOwners[key] {
+            guard Self.isBetterOwner(path, than: owner.path) else { return }
+            charge(owner.node, -owner.bytes, state: state)
+        }
+        charge(node, bytes, state: state)
+        state.streamOwners[key] = StreamOwner(node: node, path: path, bytes: bytes)
+    }
+
+    /// Adds bytes to a file and every folder above it. Callers hold the tree lock.
+    private func charge(_ node: FileNode, _ bytes: Int64, state: WalkState) {
+        var current: FileNode? = node
+        while let n = current {
+            n.accumulateDuringScan(bytes: bytes, files: 0)
+            current = n.parent
+        }
+        state.progress.byteCount += bytes
+    }
+
+    /// Copies outside temp folders win, so Chrome's launch-time clones in
+    /// `/private/var/folders` never take the bytes from Chrome.app. Then the shorter
+    /// path, then alphabetical, purely to make the choice the same on every run.
+    private static func isBetterOwner(_ path: String, than other: String) -> Bool {
+        let (disposable, otherDisposable) = (isDisposable(path), isDisposable(other))
+        if disposable != otherDisposable { return otherDisposable }
+        if path.utf8.count != other.utf8.count { return path.utf8.count < other.utf8.count }
+        return path < other
+    }
+
+    private static let disposableRoots: [String] = {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return ["/private/var/folders/", "/var/folders/", "/private/tmp/", "/tmp/",
+                home + "/Library/Caches/", home + "/.Trash/"]
+    }()
+
+    private static func isDisposable(_ path: String) -> Bool {
+        let plain = path.hasPrefix(dataVolumeMount + "/") ? String(path.dropFirst(dataVolumeMount.count)) : path
+        return disposableRoots.contains { plain.hasPrefix($0) }
     }
 
     /// Ships progress and live snapshots until the workers are done.

@@ -23,8 +23,8 @@ struct VolumeMap: Sendable {
     let siblings: [Sibling]
 
     /// Everything the scan root's container actually occupies on disk, counting each
-    /// volume once. Used to show real usage next to the scanned total, which runs
-    /// high because `totalFileAllocatedSize` bills APFS clones to every clone.
+    /// volume once. Used to show real usage next to the scanned total, which can't
+    /// see unreadable folders or file system metadata.
     let containerUsedBytes: Int64
 
     /// True when the scan starts at a volume's mount point. Only then does the
