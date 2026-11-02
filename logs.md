@@ -1,5 +1,18 @@
 # DiskLens logs
 
+## 2026-11-02 — 디스크보다 큰 합계(506GB) 진단: APFS clone 중복 집계
+
+- 변경 파일: 코드 변경 없음. 측정 도구와 결과는 `~/Bufs/Claude Files/2026-11-02/`(`clonestat`, `dedupe`, `engine-probe.sh`)
+- 요약: 245GB 디스크에서 합계가 506GB로 나왔습니다. `/private/var/folders/.../X/com.google.Chrome.code_sign_clone`의 Chrome 복사본 119개가 271GB로 잡힌 것이 대부분이고, clone ID로 한 번씩만 세면 디스크 전체가 489GB에서 206GB로 줄어 `df`와 맞습니다. 수정은 아직 하지 않았습니다.
+
+⚠️ **`ATTR_FILE_ALLOCSIZE`와 `totalFileAllocatedSize`는 APFS clone마다 전체 크기를 돌려줍니다.** 하드링크는 inode로 걸러졌지만 clone은 inode가 달라서 그대로 합산됩니다. `ATTR_CMNEXT_CLONEID`(`forkattr`, `FSOPT_ATTR_CMN_EXTENDED`)를 `getattrlistbulk`로 받으면 파일별 clone ID가 나오고, 이 조회를 더해도 스캔 시간은 그대로였습니다(27.7초 대 28초). 복사본 폴더의 실제 고유 데이터는 3.04GB이고 그중 2.28GB는 설치된 Chrome.app과 공유합니다. 지워서 돌아오는 공간은 271GB가 아니라 약 0.8GB입니다. 그래서 이 숫자를 그대로 에이전트에 넘기면 "271GB 확보 가능"이라는 잘못된 판정이 나옵니다. 지금 문구(`cloneNote`)로 안내하는 것만으로는 부족합니다.
+
+**10-28의 속도 수치는 캐시가 데워진 값입니다.** `compare.sh`가 기존 엔진을 먼저 돌렸기 때문에 새 엔진은 늘 데워진 캐시를 읽었습니다. 다시 재보니 같은 데워진 상태에서 기존 엔진 507초(앞선 회차 290초), 새 엔진 28초로 차이는 실제로 큽니다. 다만 캐시가 식으면 새 엔진도 355초가 걸립니다(프로토타입 첫 실행은 215초). 이 Mac은 메모리 압박으로 file-backed 페이지가 1.7GB 안팎이라 몇 분만 지나도 캐시가 밀려납니다. README의 "about 15 s"는 고쳐야 합니다. 앞으로 엔진을 비교할 때는 순서를 바꿔가며 두 번씩 재고, 비교 스크립트 순서로 한쪽만 이득을 보지 않게 해야 합니다.
+
+**같은 버전 번호에 빌드가 두 개입니다.** 10-28 12:44에 설치한 LaunchServices 수정 빌드와 이후 병렬 엔진 빌드가 모두 0.4.0입니다. 앱이 열려 있어 뒤쪽 설치가 멈춘 뒤로, 설치본은 0.4.0이라고 표시되지만 옛 엔진(`nm -u`에 `getattrlistbulk` 없음)입니다. 이 상태로 v0.4.0을 릴리스하면 `isNewer`가 false라 설치본이 업데이트를 받지 못하므로, 다음 릴리스는 0.4.1 이상이어야 합니다.
+
+복사본이 쌓이는 원인: Chromium의 `CodeSignCloneManager`는 브라우저 시작 때 앱을 `clonefile`로 복사하고, 소멸자에서만 정리 helper를 띄웁니다. 코드상 강제 종료되면 정리가 실행되지 않고, 오래된 복사본을 치우는 로직도 없습니다(TODO만 있음). 소스 주석에 따르면 `X` 폴더는 부팅 때 비워집니다. 가동 시간 7일 21시간과 가장 오래된 복사본(10-25)이 일치합니다. 복사본 122개 중 55개는 45초 안에 에이전트 세션의 브라우저 관련 명령(headless Chrome을 직접 띄우는 스크립트 49건 포함)이 있었습니다. 나머지 67개의 출처와 그 스크립트들의 종료 방식은 확인하지 못했습니다.
+
 ## 2026-10-28 — 병렬 스캔 엔진(6~9배), "AI로 용량 확보하기", 오래된 판정 숨김
 
 - 변경 파일: `Core/Scanner.swift`(다시 작성), `Core/FileNode.swift`, `Model/AppState.swift`, `Model/AgentChat.swift`, `Model/AnnotationCenter.swift`, `Views/AgentSidebar.swift`, `App/ContentView.swift`
